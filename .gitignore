@@ -133,6 +133,7 @@ policy/
 # Data collection folder
 data/
 log/
+dynamem_log/
 
 # install folder
 install/
@@ -142,3 +143,4 @@ debug*/
 */piper_tts/
 piper_tts/
 *.ts
+# Addtional folders
