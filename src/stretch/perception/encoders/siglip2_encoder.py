@@ -18,6 +18,7 @@ from transformers import AutoModel, AutoProcessor, AutoTokenizer
 from stretch.utils.logger import Logger
 
 from .base_encoder import BaseImageTextEncoder
+from .siglip_encoder import _as_embedding
 
 logger = Logger(__name__)
 
@@ -88,7 +89,7 @@ class Siglip2Encoder(BaseImageTextEncoder):
         inputs = self.processor(images=image, return_tensors="pt")
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         with torch.no_grad():
-            image_features = self.model.get_image_features(**inputs)
+            image_features = _as_embedding(self.model.get_image_features(**inputs))
         if self.normalize:
             image_features /= image_features.norm(dim=-1, keepdim=True)
         return image_features.float()
@@ -99,7 +100,7 @@ class Siglip2Encoder(BaseImageTextEncoder):
         inputs = self.tokenizer([text], padding="max_length", return_tensors="pt")
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         with torch.no_grad():
-            text_features = self.model.get_text_features(**inputs)
+            text_features = _as_embedding(self.model.get_text_features(**inputs))
         if self.normalize:
             text_features /= text_features.norm(dim=-1, keepdim=True)
         return text_features.float()
@@ -133,7 +134,7 @@ class Siglip2Encoder(BaseImageTextEncoder):
         inputs = self.tokenizer(texts, padding="max_length", return_tensors="pt")
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         with torch.no_grad():
-            text_features = self.model.get_text_features(**inputs)
+            text_features = _as_embedding(self.model.get_text_features(**inputs))
         return text_features.float()
 
     def compute_score(self, image: torch.Tensor, text: torch.Tensor) -> torch.Tensor:

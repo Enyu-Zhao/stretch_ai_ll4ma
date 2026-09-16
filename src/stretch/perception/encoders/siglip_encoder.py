@@ -22,6 +22,17 @@ from .base_encoder import BaseImageTextEncoder
 logger = Logger(__name__)
 
 
+def _as_embedding(output) -> torch.Tensor:
+    """Return the feature tensor from get_text_features()/get_image_features().
+
+    transformers < 5 returned the pooled embedding directly; transformers >= 5 returns a
+    BaseModelOutputWithPooling whose pooler_output is that same embedding.
+    """
+    if isinstance(output, torch.Tensor):
+        return output
+    return output.pooler_output
+
+
 class SiglipEncoder(BaseImageTextEncoder):
     """Image/text feature encoder using SIGLip model.
 
@@ -81,7 +92,7 @@ class SiglipEncoder(BaseImageTextEncoder):
         inputs = self.processor(images=image, return_tensors="pt")
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         with torch.no_grad():
-            image_features = self.model.get_image_features(**inputs)
+            image_features = _as_embedding(self.model.get_image_features(**inputs))
         if self.normalize:
             image_features /= image_features.norm(dim=-1, keepdim=True)
         return image_features.float()
@@ -92,7 +103,7 @@ class SiglipEncoder(BaseImageTextEncoder):
         inputs = self.tokenizer([text], padding="max_length", return_tensors="pt")
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         with torch.no_grad():
-            text_features = self.model.get_text_features(**inputs)
+            text_features = _as_embedding(self.model.get_text_features(**inputs))
         if self.normalize:
             text_features /= text_features.norm(dim=-1, keepdim=True)
         return text_features.float()
@@ -126,7 +137,7 @@ class SiglipEncoder(BaseImageTextEncoder):
         inputs = self.tokenizer(texts, padding="max_length", return_tensors="pt")
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         with torch.no_grad():
-            text_features = self.model.get_text_features(**inputs)
+            text_features = _as_embedding(self.model.get_text_features(**inputs))
         return text_features.float()
 
     def compute_score(self, image: torch.Tensor, text: torch.Tensor) -> torch.Tensor:
