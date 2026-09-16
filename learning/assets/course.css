@@ -1,0 +1,161 @@
+/* Shared stylesheet for the DynaMem course. Every lesson and reference links this file. */
+:root {
+  color-scheme: light;
+  --bg: #f5f7f8;
+  --ink: #17202a;
+  --muted: #5b6875;
+  --accent: #0e7c7b;
+  --rule: #d6dee3;
+  --code-bg: #e9eef1;
+  --ok: #1f7a3a;
+  --bad: #a83a2a;
+  --mark: #d9f1eb;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #12171b;
+    --ink: #e6ebee;
+    --muted: #93a1ac;
+    --accent: #4fc1b7;
+    --rule: #2a343b;
+    --code-bg: #1b2228;
+    --ok: #62c58a;
+    --bad: #e08674;
+    --mark: #1f3b38;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #12171b;
+  --ink: #e6ebee;
+  --muted: #93a1ac;
+  --accent: #4fc1b7;
+  --rule: #2a343b;
+  --code-bg: #1b2228;
+  --ok: #62c58a;
+  --bad: #e08674;
+  --mark: #1f3b38;
+}
+
+html { font-size: 18px; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Source Serif 4", "Iowan Old Style", Palatino, Georgia, serif;
+  line-height: 1.55;
+}
+.page { max-width: 46rem; margin: 0 auto; padding: 3rem 1.5rem 6rem; }
+
+h1, h2, h3, .kicker, th, .q, nav.course, .task button, .quiz button.opt {
+  font-family: "IBM Plex Sans Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+}
+header.lesson h1 {
+  font-size: 2.6rem; font-weight: 600; letter-spacing: -.01em;
+  margin: 0 0 .25rem; line-height: 1.1; text-wrap: balance;
+}
+.kicker { text-transform: uppercase; letter-spacing: .14em; font-size: .7rem; color: var(--muted); }
+.subtitle { color: var(--muted); margin: .25rem 0 2rem; font-size: 1.05rem; }
+
+h2 {
+  font-weight: 600; font-size: 1.45rem; text-wrap: balance;
+  margin: 2.75rem 0 .75rem; padding-top: 1.25rem; border-top: 1px solid var(--rule);
+}
+h3 { font-weight: 600; font-size: 1rem; margin: 1.75rem 0 .5rem; }
+p, ul, ol { margin: 0 0 1rem; }
+li { margin-bottom: .35rem; }
+
+a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--rule); }
+a:hover { border-bottom-color: var(--accent); }
+
+code {
+  font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: .82em; background: var(--code-bg); padding: .1em .35em; border-radius: 3px;
+}
+pre {
+  background: var(--code-bg); padding: 1rem 1.1rem; overflow-x: auto;
+  border-radius: 4px; font-size: .78rem; line-height: 1.5;
+}
+pre code { background: none; padding: 0; font-size: 1em; }
+mark { background: var(--mark); color: inherit; padding: 0 .15em; }
+
+.mission {
+  border-left: 3px solid var(--accent); padding: .4rem 1rem;
+  color: var(--muted); font-style: italic; margin: 0 0 2rem;
+}
+.callout { background: var(--code-bg); padding: 1rem 1.25rem; border-radius: 4px; margin: 1.25rem 0; }
+.callout > strong:first-child { display: block; margin-bottom: .3rem; }
+.aside { font-size: .88rem; color: var(--muted); }
+
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .88rem; margin: 1rem 0; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: .5rem .65rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+
+figure { margin: 1.75rem 0; }
+figure svg { width: 100%; height: auto; display: block; }
+figcaption { font-size: .8rem; color: var(--muted); margin-top: .6rem; }
+
+/* Diagram tokens (used by inline SVG) */
+.d-box { fill: var(--code-bg); stroke: var(--rule); stroke-width: 1; }
+.d-box.hot { stroke: var(--accent); stroke-width: 1.5; }
+.d-text { fill: var(--ink); font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; }
+.d-label { fill: var(--muted); font-family: inherit; font-size: 11px; font-style: italic; }
+.d-arrow { stroke: var(--muted); stroke-width: 1.2; fill: none; marker-end: url(#arrow); }
+.d-head { fill: var(--muted); }
+
+/* Quiz and task widgets (driven by quiz.js) */
+.quiz, .task {
+  margin: 1.5rem 0; padding: 1.25rem 1.4rem;
+  border: 1px solid var(--rule); border-radius: 6px;
+}
+.quiz .q, .task .q { font-weight: 600; margin: 0 0 .8rem; }
+.quiz .opts { display: grid; gap: .5rem; }
+.quiz button.opt {
+  font-size: .95rem; text-align: left; line-height: 1.4;
+  background: var(--bg); color: var(--ink);
+  border: 1px solid var(--rule); border-radius: 4px; padding: .6rem .85rem; cursor: pointer;
+}
+.quiz button.opt:hover:not(:disabled) { border-color: var(--accent); }
+.quiz button.opt:disabled { cursor: default; opacity: .85; }
+.quiz button.opt.correct { border-color: var(--ok); box-shadow: inset 3px 0 0 var(--ok); }
+.quiz button.opt.wrong { border-color: var(--bad); box-shadow: inset 3px 0 0 var(--bad); }
+.fb { margin: .8rem 0 0; font-size: .9rem; min-height: 1.3em; }
+.fb.ok { color: var(--ok); }
+.fb.bad { color: var(--bad); }
+.task form { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.task input {
+  font: inherit; padding: .45rem .65rem; border: 1px solid var(--rule); border-radius: 4px;
+  background: var(--bg); color: var(--ink); width: 9rem;
+}
+.task button {
+  font-size: .95rem; padding: .45rem .9rem; border: 1px solid var(--accent); border-radius: 4px;
+  background: var(--accent); color: var(--bg); cursor: pointer;
+}
+.score { font-weight: 600; margin-top: 1rem; }
+
+details { margin: 1rem 0; }
+summary { cursor: pointer; color: var(--accent); }
+
+nav.course {
+  display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  font-size: .85rem; margin-top: 3.5rem; border-top: 1px solid var(--rule); padding-top: 1rem;
+}
+.notes { font-size: .8rem; color: var(--muted); border-top: 1px solid var(--rule); margin-top: 3rem; padding-top: 1rem; }
+.notes ol { padding-left: 1.2rem; }
+
+@media print {
+  html { font-size: 11pt; }
+  body { background: #fff; color: #000; }
+  .page { max-width: none; padding: 0; }
+  a { color: #000; border-bottom: none; }
+  a[href^="http"]::after { content: " (" attr(href) ")"; font-size: .8em; color: #555; }
+  .quiz button.opt { border: 1px solid #999; }
+  nav.course, .task button { display: none; }
+  h2 { break-after: avoid; }
+  pre, figure, .quiz, table { break-inside: avoid; }
+}
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: no-preference) { .quiz button.opt { transition: border-color .12s ease; } }

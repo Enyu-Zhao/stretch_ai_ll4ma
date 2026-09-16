@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DynaMem Code Map</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Mono&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<div class="page">
+<header class="lesson">
+  <div class="kicker">Reference</div>
+  <h1>DynaMem code map</h1>
+  <p class="subtitle">Where each piece of DynaMem lives in <code>stretch_ai</code>, and the call chain for one pick-and-place. Print this.</p>
+</header>
+
+<h2>Call chain for “pick up A and place it on B”</h2>
+<pre><code>python -m stretch.app.run_dynamem
+└─ app/run_dynamem.py:main
+   ├─ get_parameters("dynav_config.yaml")
+   ├─ HomeRobotZmqClient(robot_ip)                       # talks to the robot over ZMQ
+   ├─ DynamemTaskExecutor(...)                           # agent/task/dynamem/dynamem_task.py
+   │  └─ RobotAgent(...)                                 # agent/robot_agent_dynamem.py
+   │     └─ create_obstacle_map()
+   │        ├─ encoder   = MaskSiglipEncoder | MaskClipEncoder (cpu)
+   │        ├─ detector  = OwlPerception | YoloEPerception (cpu)
+   │        ├─ voxel_map = SparseVoxelMap (voxel_dynamem.py)   ← two clouds live here
+   │        ├─ space     = SparseVoxelMapNavigationSpace (voxel_map_dynamem.py)
+   │        └─ planner   = AStar(space)
+   ├─ executor([("rotate_in_place","")])  or  [("read_from_pickle", path)]
+   └─ loop:  executor([("pickup", A), ("place", B)])
+         ├─ "pickup" → _find(A) → agent.navigate(A) ──┐
+         │            → _pickup(A)                    │  navigate() loops execute_action()
+         └─ "place"  → _find(B) → agent.navigate(B)   │  ≤10 times; each call: look_around(),
+                      → _place(B)                     │  process_text(), run ≤8 waypoints
+                                                      └─ process_text(): verify_point → localize_text
+                                                          → sample_navigation → planner.plan</code></pre>
+
+<h2>Files</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>File</th><th>Role</th><th>Functions to know</th></tr></thead>
+<tbody>
+<tr><td><a href="../../src/stretch/app/run_dynamem.py">app/run_dynamem.py</a></td>
+    <td>CLI entry. Parses flags, builds executor, runs the E/M prompt loop.</td>
+    <td><code>main</code> (flags at top; loop at the bottom)</td></tr>
+<tr><td><a href="../../src/stretch/agent/task/dynamem/dynamem_task.py">agent/task/dynamem/dynamem_task.py</a></td>
+    <td>Command interpreter. Turns <code>("pickup", A)</code> into navigate + pick, with optional human confirmations. Saves the memory pickle after each navigate.</td>
+    <td><code>DynamemTaskExecutor.__call__</code>, <code>_find</code>, <code>_pickup</code>, <code>_place</code>, <code>compute_tilt</code></td></tr>
+<tr><td><a href="../../src/stretch/agent/robot_agent_dynamem.py">agent/robot_agent_dynamem.py</a></td>
+    <td>The agent. Owns the models, the voxel map, planner, rerun view. Implements the closed-loop navigate/explore cycle and the two manipulation paths.</td>
+    <td><code>create_obstacle_map</code>, <code>update</code>, <code>look_around</code>, <code>rotate_in_place</code>, <code>execute_action</code>, <code>process_text</code>, <code>navigate</code>, <code>run_exploration</code>, <code>manipulate</code>, <code>place</code></td></tr>
+<tr><td><a href="../../src/stretch/mapping/voxel/voxel_dynamem.py">mapping/voxel/voxel_dynamem.py</a></td>
+    <td>The memory. Subclasses the base <code>SparseVoxelMap</code>; adds <code>semantic_memory</code>, the 2D map with a history layer, text localisation, pickle I/O. EQA code from line ~932 on.</td>
+    <td><code>process_rgbd_images</code>, <code>add</code>, <code>add_to_semantic_memory</code>, <code>get_2d_map</code>, <code>localize_text</code>, <code>localize_with_feature_similarity</code>, <code>localize_with_mllm</code>, <code>find_all_images</code>, <code>verify_point</code>, <code>write_to_pickle</code>, <code>read_from_pickle</code></td></tr>
+<tr><td><a href="../../src/stretch/utils/voxel.py">utils/voxel.py</a></td>
+    <td>Generic voxelised point cloud. Holds points, features, rgb, weights, <code>_obs_counts</code>. The point-removal rule lives here.</td>
+    <td><code>VoxelizedPointcloud.add</code>, <code>clear_points</code>, <code>get_pointcloud</code>, <code>scatter3d</code></td></tr>
+<tr><td><a href="../../src/stretch/mapping/voxel/voxel_map_dynamem.py">mapping/voxel/voxel_map_dynamem.py</a></td>
+    <td>Navigation space over the map: picks a standing pose near a target and picks exploration goals from the time-value map.</td>
+    <td><code>sample_target_point</code>, <code>sample_navigation</code>, <code>sample_exploration</code>, <code>_time_heuristic</code>, <code>sample_frontier</code></td></tr>
+<tr><td><a href="../../src/stretch/config/dynav_config.yaml">config/dynav_config.yaml</a></td>
+    <td>All tunables: voxel size, obstacle heights and density, depth range, filters, planner step sizes.</td>
+    <td>top-level keys; <code>motion_planner.frontier</code>; <code>trajectory_*</code></td></tr>
+<tr><td><a href="../../src/stretch/agent/manipulation/dynamem_manipulation/">agent/manipulation/dynamem_manipulation/</a></td>
+    <td>OK-Robot style manipulation: sends head-camera images over ZMQ to the AnyGrasp server, converts the returned 6-DoF pose to joint moves via the URDF. Also the local placing heuristic.</td>
+    <td><code>grasper_utils.capture_and_process_image</code>, <code>pickup</code>, <code>move_to_point</code>, <code>process_image_for_placing</code>, <code>DynamemManipulationWrapper.move_to_pose</code></td></tr>
+<tr><td><a href="../../src/stretch/llms/prompts/dynamem_visual_grounding_prompt.py">llms/prompts/dynamem_visual_grounding_prompt.py</a></td>
+    <td>System prompt for GPT-4o when <code>--mllm</code> is on.</td>
+    <td><code>DYNAMEM_VISUAL_GROUNDING_PROMPT</code></td></tr>
+<tr><td><a href="../../src/stretch/config/dynamem_urdf.py">config/dynamem_urdf.py</a></td>
+    <td>Patches a calibrated robot URDF for the manipulation code.</td>
+    <td>CLI, run once after copying <code>stretch.urdf</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>The two clouds, side by side</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th></th><th><code>voxel_map.voxel_pcd</code></th><th><code>voxel_map.semantic_memory</code></th></tr></thead>
+<tbody>
+<tr><td>Purpose</td><td>Obstacles and explored area for A* and exploration</td><td>Visual grounding: which voxel matches a text query</td></tr>
+<tr><td>Resolution</td><td><code>voxel_size</code> = 0.10 m (config)</td><td><code>semantic_memory_resolution</code> = 0.05 m (GPU) or 0.10 m (mLLM / manipulation-only)</td></tr>
+<tr><td>Per-point payload</td><td>xyz, rgb, count, <code>_obs_counts</code></td><td>xyz, rgb, SigLIP/CLIP feature, weight, <code>_obs_counts</code></td></tr>
+<tr><td>Fed by</td><td><code>SparseVoxelMap.add</code> (base class path, 10% of valid pixels)</td><td><code>add_to_semantic_memory</code> (5% of valid pixels, features from <code>run_mask_siglip</code>)</td></tr>
+<tr><td>Cleared by</td><td><code>voxel_pcd.clear_points(depth, K, pose)</code></td><td><code>semantic_memory.clear_points(..., min_samples_clear=10)</code> (adds a DBSCAN pass)</td></tr>
+<tr><td>Read by</td><td><code>get_2d_map</code> → obstacles, explored, history</td><td><code>find_alignment_over_model</code> → cosine similarity per point</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>Numbers that matter</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Value</th><th>Where</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td>8</td><td><code>process_text</code></td><td>Waypoints executed before stopping to rescan and replan (paper says ~7).</td></tr>
+<tr><td>10</td><td><code>navigate(max_step=10)</code></td><td>Max rescan-and-replan cycles per navigate call.</td></tr>
+<tr><td>8 × 45°</td><td><code>rotate_in_place</code></td><td>Initial scan: eight base rotations, one observation each.</td></tr>
+<tr><td>pans 0.6, −0.2, −1.0, −1.8</td><td><code>look_around</code></td><td>Head sweep before each replan, tilt −0.6.</td></tr>
+<tr><td>0.14 / 0.35</td><td><code>create_obstacle_map</code></td><td>Feature-match threshold, SigLIP (GPU) / CLIP (CPU).</td></tr>
+<tr><td>0.21</td><td><code>localize_with_feature_similarity</code></td><td>Hard-coded fallback: accept top voxel if detector fails but similarity is this high.</td></tr>
+<tr><td>2.5 m, 0.1 m</td><td><code>clear_points</code></td><td>Max depth considered for removal; margin before a point counts as “seen through”.</td></tr>
+<tr><td>0.25 – 2.5 m</td><td><code>dynav_config.yaml</code></td><td>Depth range kept when adding points.</td></tr>
+<tr><td>0.2 – 1.5 m</td><td><code>dynav_config.yaml</code></td><td>Height band that counts as obstacle in the 2D map.</td></tr>
+<tr><td>30 / 35 cells</td><td><code>get_2d_map</code></td><td>Border of the grid forced to obstacle / max-history so the robot never plans off the map.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>Flags → behaviour</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Flag</th><th>Effect in code</th></tr></thead>
+<tbody>
+<tr><td><code>-S</code> / <code>--skip</code></td><td><code>skip_confirmations=True</code>: no “Do you want to run navigation/picking/placement?” prompts.</td></tr>
+<tr><td><code>--visual-servo</code> / <code>--vs</code></td><td>Builds a semantic sensor (OWL+SAM on GPU, YOLOE on CPU) and uses <code>GraspObjectOperation</code> instead of the AnyGrasp socket. Placing runs locally with YOLOE.</td></tr>
+<tr><td><code>--mllm</code> / <code>-M</code></td><td><code>localize_text</code> routes to <code>localize_with_mllm</code>: top-3 images → GPT-4o picks one → OWLv2 pinpoints. Detector switches to smaller OWLv2-B; semantic resolution coarsens to 0.1 m.</td></tr>
+<tr><td><code>--cpu</code></td><td>CLIP ViT-B/16 + YOLOE-L, 360×270 images, threshold 0.35. Auto-enabled when CUDA is absent.</td></tr>
+<tr><td><code>--input-path</code></td><td>Skip <code>rotate_in_place</code>; load both clouds from the pickle.</td></tr>
+<tr><td><code>--output-path</code></td><td>Name under <code>dynamem_log/</code> for the pickle and per-frame rgb/depth/pose dumps.</td></tr>
+<tr><td><code>--explore-iter N</code></td><td>Parsed by click but not passed to the executor: the executor's default of 5 is what actually runs.</td></tr>
+<tr><td><code>--server_ip</code></td><td>Host of the AnyGrasp ZMQ server (port 5557).</td></tr>
+</tbody>
+</table>
+</div>
+
+<nav class="course">
+  <a href="../lessons/0001-dynamem-big-picture.html">← Lesson 1: the big picture</a>
+  <a href="../MISSION.md">Mission</a>
+</nav>
+</div>
+</body>
+</html>

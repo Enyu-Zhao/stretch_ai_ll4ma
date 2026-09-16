@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DynaMem, the big picture</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Mono&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/quiz.js" defer></script>
+</head>
+<body>
+<div class="page">
+<header class="lesson">
+  <div class="kicker">Lesson 1 · about 12 minutes</div>
+  <h1>DynaMem, the big picture</h1>
+  <p class="subtitle">Four calls, two point clouds, and one rule that makes the memory “dynamic”.</p>
+</header>
+
+<p class="mission">Mission: read, run, and change DynaMem in this repo with confidence. This lesson gives you the map you will use for every later one: which file does what, and why the memory is built the way it is.</p>
+
+<h2>What DynaMem is</h2>
+<p>DynaMem is the open-vocabulary mobile manipulation stack in <code>stretch_ai</code>. You type <em>“pick up the apple and place it on the plate”</em> and the robot navigates to the apple, picks it, navigates to the plate, and drops it. The thing that makes it different from a static map is in the name: the memory is <strong>updated online</strong>, so objects that move, appear, or vanish are reflected without re-scanning the room.<sup class="cite"><a href="#n1">1</a></sup></p>
+
+<p>The paper reports a 70% pick-and-drop success rate on objects that were moved between scans, against 30% for the static predecessor OK-Robot.<sup class="cite"><a href="#n1">1</a></sup> Keep that number in mind: nearly all of the code you will read exists to earn it.</p>
+
+<h2>The four calls</h2>
+<p>Every pick-and-place is the same four calls, in the same order. The repo's own documentation says so<sup class="cite"><a href="#n2">2</a></sup>, and the interpreter in <a href="../../src/stretch/agent/task/dynamem/dynamem_task.py"><code>dynamem_task.py</code></a> hard-codes it: a <code>("pickup", A)</code> command runs <code>_find(A)</code> then <code>_pickup(A)</code>; a <code>("place", B)</code> command runs <code>_find(B)</code> then <code>_place(B)</code>.</p>
+
+<figure>
+<svg viewBox="0 0 720 150" role="img" aria-label="navigate(A), pick(A), navigate(B), place(B) in a row">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="d-head"/></marker></defs>
+  <rect x="10"  y="40" width="150" height="50" rx="6" class="d-box hot"/><text x="85"  y="70" text-anchor="middle" class="d-text">navigate(A)</text>
+  <rect x="195" y="40" width="150" height="50" rx="6" class="d-box"/><text x="270" y="70" text-anchor="middle" class="d-text">pick(A)</text>
+  <rect x="380" y="40" width="150" height="50" rx="6" class="d-box hot"/><text x="455" y="70" text-anchor="middle" class="d-text">navigate(B)</text>
+  <rect x="565" y="40" width="145" height="50" rx="6" class="d-box"/><text x="637" y="70" text-anchor="middle" class="d-text">place(B)</text>
+  <line x1="160" y1="65" x2="193" y2="65" class="d-arrow"/>
+  <line x1="345" y1="65" x2="378" y2="65" class="d-arrow"/>
+  <line x1="530" y1="65" x2="563" y2="65" class="d-arrow"/>
+  <text x="85"  y="115" text-anchor="middle" class="d-label">uses the memory</text>
+  <text x="270" y="115" text-anchor="middle" class="d-label">AnyGrasp or visual servo</text>
+  <text x="455" y="115" text-anchor="middle" class="d-label">uses the memory</text>
+  <text x="637" y="115" text-anchor="middle" class="d-label">detect + drop</text>
+</svg>
+<figcaption>The two <code>navigate</code> calls are where DynaMem's memory does its work. <code>pick</code> and <code>place</code> are borrowed from OK-Robot or from the visual-servo grasper, depending on flags.</figcaption>
+</figure>
+
+<p>There is a fifth call, <code>explore()</code>, which is <code>navigate</code> with an empty query: the robot goes wherever the memory says it is most worth looking, and updates as it goes.</p>
+
+<h2>Where the calls live</h2>
+<p>Three Python objects stack on top of each other. Learn the names now and every later lesson gets shorter.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Layer</th><th>Class · file</th><th>What it owns</th></tr></thead>
+<tbody>
+<tr><td>Entry</td><td><code>main</code> · <a href="../../src/stretch/app/run_dynamem.py">app/run_dynamem.py</a></td><td>CLI flags, the <code>E / M</code> prompt loop, the optional LLM chat wrapper.</td></tr>
+<tr><td>Interpreter</td><td><code>DynamemTaskExecutor</code> · <a href="../../src/stretch/agent/task/dynamem/dynamem_task.py">agent/task/dynamem/dynamem_task.py</a></td><td>Turns command tuples into the four calls; asks the human for confirmation unless <code>-S</code>; saves the memory pickle after each navigate.</td></tr>
+<tr><td>Agent</td><td><code>RobotAgent</code> · <a href="../../src/stretch/agent/robot_agent_dynamem.py">agent/robot_agent_dynamem.py</a></td><td>The models, the voxel map, the A* planner, the rerun view, and the navigate / explore / manipulate / place methods.</td></tr>
+<tr><td>Memory</td><td><code>SparseVoxelMap</code> · <a href="../../src/stretch/mapping/voxel/voxel_dynamem.py">mapping/voxel/voxel_dynamem.py</a></td><td>The two point clouds, the 2D map, text localisation, pickle I/O.</td></tr>
+</tbody>
+</table>
+</div>
+
+<p class="aside">The agent's constructor also opens a ZMQ socket to port 5557. That is the AnyGrasp server from OK-Robot, which runs in a separate conda environment because its dependencies conflict with this repo's Python.<sup class="cite"><a href="#n2">2</a></sup></p>
+
+<h2>Two point clouds, not one</h2>
+<p>This is the design decision to internalise. <code>SparseVoxelMap</code> keeps <strong>two</strong> voxelised point clouds, and they answer different questions.</p>
+
+<div class="callout">
+<strong><code>voxel_pcd</code>: the obstacle cloud</strong>
+Inherited from the base map. Points carry position and colour only. Voxel size is <code>voxel_size</code> = 0.10 m from <a href="../../src/stretch/config/dynav_config.yaml"><code>dynav_config.yaml</code></a>. It is flattened into a 2D grid of <em>obstacles</em> and <em>explored</em> cells that A* plans on, and into a <em>history</em> layer that drives exploration.
+</div>
+
+<div class="callout">
+<strong><code>semantic_memory</code>: the feature cloud</strong>
+Created in the DynaMem subclass. Every point also carries a vision-language feature vector (SigLIP on GPU, CLIP on CPU) and the id of the image it came from. Voxel size is 0.05 m on GPU. When you ask for “apple”, the text is embedded and dotted against every point's feature; the best point tells the robot where to go and which stored image to double-check with an object detector.
+</div>
+
+<p>Why not one cloud? Because the two have opposite needs. Planning wants a dense, cheap, geometry-only grid. Grounding wants sparse points with expensive features attached. The code even subsamples them differently when adding a frame: the obstacle cloud keeps 10% of valid pixels, the semantic cloud keeps 5%.<sup class="cite"><a href="#n3">3</a></sup></p>
+
+<h2>The rule that makes it dynamic</h2>
+<p>Look at <code>process_rgbd_images</code> in <a href="../../src/stretch/mapping/voxel/voxel_dynamem.py"><code>voxel_dynamem.py</code></a>. For every new RGB-D frame it does, in order:</p>
+<ol>
+  <li><mark><code>voxel_pcd.clear_points(depth, K, pose)</code></mark>, then <code>add(...)</code> new obstacle points.</li>
+  <li><mark><code>semantic_memory.clear_points(...)</code></mark>, then <code>add_to_semantic_memory(...)</code> new featured points.</li>
+</ol>
+<p><strong>Clear before add.</strong> <code>clear_points</code>, in <a href="../../src/stretch/utils/voxel.py"><code>utils/voxel.py</code></a>, projects every stored point into the new camera. A stored point is <em>deleted</em> if it lands inside the image, closer than 2.5 m, and the new depth image sees <em>past</em> it by more than 0.1 m. In words: if the camera can now see through the place where a point used to be, that point is gone. That is the paper's ray-casting removal rule<sup class="cite"><a href="#n1">1</a></sup>, and the ablation says it alone is worth about three points of success rate (70.6% with removal vs 67.8% without).</p>
+
+<p class="aside">Everything else about the memory being “online” follows from this. The robot rescans after every 8 waypoints (<code>process_text</code> in the agent), and each rescan both removes stale points and adds fresh ones.</p>
+
+<h2>Check yourself</h2>
+<p>Answer from memory first. Each question allows one attempt and explains itself.</p>
+
+<div class="quiz" data-answer="a" data-explain="dynamem_task.py runs _find then _pickup for a pickup command, and _find then _place for a place command.">
+  <p class="q">1. For “pick up the apple and place it on the plate”, which sequence does the executor run?</p>
+  <div class="opts">
+    <button class="opt" data-key="a">navigate(apple), pick(apple), navigate(plate), place(plate)</button>
+    <button class="opt" data-key="b">pick(apple), navigate(plate), place(plate), navigate(start)</button>
+    <button class="opt" data-key="c">explore(room), navigate(apple), pick(apple), place(plate)</button>
+    <button class="opt" data-key="d">navigate(apple), navigate(plate), pick(apple), place(plate)</button>
+  </div>
+</div>
+
+<div class="quiz" data-answer="b" data-explain="get_2d_map flattens voxel_pcd into obstacles and explored cells; the A* planner works on that grid.">
+  <p class="q">2. Which point cloud does the A* planner see?</p>
+  <div class="opts">
+    <button class="opt" data-key="a">semantic_memory, the feature cloud</button>
+    <button class="opt" data-key="b">voxel_pcd, the obstacle cloud</button>
+    <button class="opt" data-key="c">observations, the frame history</button>
+    <button class="opt" data-key="d">instance_memory, the object store</button>
+  </div>
+</div>
+
+<div class="quiz" data-answer="c" data-explain="clear_points runs on both clouds before add; the whole map is never reset, and the frame history only grows.">
+  <p class="q">3. What happens in <code>process_rgbd_images</code> before new points are added?</p>
+  <div class="opts">
+    <button class="opt" data-key="a">Whole map is reset then rebuilt</button>
+    <button class="opt" data-key="b">Old frames are dropped from history</button>
+    <button class="opt" data-key="c">Stale points along camera rays are cleared</button>
+    <button class="opt" data-key="d">Voxel weights are decayed by time</button>
+  </div>
+</div>
+
+<div class="quiz" data-answer="d" data-explain="Both clouds store the id of the frame each point came from (_obs_counts), which is how the best-matching point leads back to an image.">
+  <p class="q">4. Which field lets a matched point in <code>semantic_memory</code> lead back to a stored image?</p>
+  <div class="opts">
+    <button class="opt" data-key="a">the per-point weight value</button>
+    <button class="opt" data-key="b">the per-point colour value</button>
+    <button class="opt" data-key="c">the per-point height value</button>
+    <button class="opt" data-key="d">the per-point frame id</button>
+  </div>
+</div>
+
+<div class="task" data-answer="8|eight" data-explain="In process_text, waypoints beyond the first 8 are stashed in space.traj and the robot rescans before continuing. The paper describes this as about 7.">
+  <p class="q">5. Open <a href="../../src/stretch/agent/robot_agent_dynamem.py"><code>robot_agent_dynamem.py</code></a>, find <code>process_text</code>, and read how many waypoints the robot executes before it stops to rescan. Type the number.</p>
+  <form><input name="a" autocomplete="off" placeholder="number"><button type="submit">Check</button></form>
+</div>
+
+<p class="score" data-quiz-score></p>
+
+<h2>Read next</h2>
+<p><strong>Primary source:</strong> the paper's method section, <a href="https://arxiv.org/html/2411.04999">arXiv 2411.04999 (HTML)</a>, subsections on “Dynamic spatio-semantic memory” and “Querying the memory”. Fifteen minutes. Read it with <a href="../../src/stretch/mapping/voxel/voxel_dynamem.py"><code>voxel_dynamem.py</code></a> open beside it and try to match each paragraph to a function.</p>
+<p><strong>Reference:</strong> <a href="../reference/dynamem-code-map.html">DynaMem code map</a>, the compressed version of this lesson with every file, function, flag, and magic number in one place.</p>
+
+<div class="callout">
+<strong>Ask your teacher.</strong>
+Anything unclear, or a question the quiz raised? Ask in the agent session that generated this lesson. Good follow-ups: “why 8 waypoints and not the whole path?”, “what does the DBSCAN pass in <code>clear_points</code> do?”, “where would I change the similarity threshold?”
+</div>
+
+<nav class="course">
+  <span>Lesson 1 of the DynaMem course</span>
+  <a href="../reference/dynamem-code-map.html">Code map →</a>
+</nav>
+
+<div class="notes">
+<ol>
+  <li id="n1">Liu, Guo, Warke, Chintala, Paxton, Shafiullah, Pinto. <em>DynaMem: Online Dynamic Spatio-Semantic Memory for Open World Mobile Manipulation</em>, 2024. <a href="https://arxiv.org/abs/2411.04999">arXiv:2411.04999</a>. Success rates and ablations from the experiments section; removal rule from the method section.</li>
+  <li id="n2"><a href="../../docs/dynamem.md">docs/dynamem.md</a> in this repo, sections “Understanding Dynamem code structure” and “Manipulation with AnyGrasp”.</li>
+  <li id="n3"><code>point_update_threshold=0.9</code> in <code>SparseVoxelMap.add</code> and <code>threshold=0.95</code> in <code>add_to_semantic_memory</code>, both in <a href="../../src/stretch/mapping/voxel/voxel_dynamem.py">voxel_dynamem.py</a>.</li>
+</ol>
+</div>
+</div>
+</body>
+</html>
